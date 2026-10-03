@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TrustLayers Investigation Report - {{ case.id }}</title>
+    <style>
+        :root {
+            --paper: #EBEEF1;
+            --sheet: #F7F8F9;
+            --ink: #1C2832;
+            --graphite: #4E5B66;
+            --rule: #C5CDD4;
+            --petrol: #1F5A6A;
+            --v-authentic: #2B6A4E;
+            --v-manipulated: #A4382A;
+            --v-coordinated: #8A4A10;
+            --v-inconclusive: #465766;
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: var(--paper);
+            color: var(--ink);
+            margin: 0;
+            padding: 40px 20px;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 880px;
+            margin: 0 auto;
+            background-color: var(--sheet);
+            border: 1px solid var(--rule);
+            padding: 32px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--rule);
+            padding-bottom: 16px;
+            margin-bottom: 24px;
+        }
+
+        .brand {
+            font-size: 28px;
+            font-weight: 800;
+            color: var(--ink);
+        }
+
+        .case-id {
+            font-family: monospace;
+            font-size: 13px;
+            color: var(--graphite);
+        }
+
+        .verdict-banner {
+            border-left: 6px solid var(--graphite);
+            padding: 20px;
+            background-color: #ffffff;
+            border-radius: 2px;
+            margin-bottom: 24px;
+        }
+
+        .verdict-banner.AUTHENTIC { border-left-color: var(--v-authentic); }
+        .verdict-banner.MANIPULATED { border-left-color: var(--v-manipulated); }
+        .verdict-banner.COORDINATED_SYNTHETIC { border-left-color: var(--v-coordinated); }
+        .verdict-banner.INCONCLUSIVE { border-left-color: var(--v-inconclusive); }
+
+        .verdict-title {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+        }
+
+        .verdict-statement {
+            font-size: 16px;
+            margin-bottom: 12px;
+            color: var(--ink);
+        }
+
+        .meta-row {
+            font-size: 13px;
+            color: var(--graphite);
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .section-title {
+            font-size: 19px;
+            font-weight: 600;
+            border-bottom: 1px solid var(--rule);
+            padding-bottom: 8px;
+            margin-top: 32px;
+            margin-bottom: 16px;
+        }
+
+        .evidence-card {
+            border: 1px solid var(--rule);
+            background-color: #ffffff;
+            padding: 16px;
+            margin-bottom: 12px;
+            display: flex;
+            gap: 16px;
+        }
+
+        .ev-finding {
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .ev-meta {
+            font-size: 13px;
+            color: var(--graphite);
+        }
+
+        .limitations-box {
+            background-color: #FFF8F6;
+            border: 1px solid #F5C6CB;
+            padding: 16px;
+            border-radius: 2px;
+            margin-top: 24px;
+        }
+
+        .footer {
+            margin-top: 40px;
+            border-top: 1px solid var(--rule);
+            padding-top: 16px;
+            font-size: 12px;
+            color: var(--graphite);
+            text-align: center;
+        }
+
+        @media print {
+            body { background-color: #ffffff; padding: 0; }
+            .container { border: none; box-shadow: none; max-width: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="brand">T² TrustLayers</div>
+            <div class="case-id">Case ID: {{ case.id | e }}</div>
+        </div>
+
+        {% if case.fusion %}
+        <div class="verdict-banner {{ case.fusion.verdict }}">
+            <div class="verdict-title">Verdict: {{ case.fusion.verdict | e }}</div>
+            <div class="verdict-statement">
+                {% if case.fusion.verdict == 'AUTHENTIC' %}
+                    The artifacts support each other and show no sign of manipulation. This is an assessment, not proof.
+                {% elif case.fusion.verdict == 'MANIPULATED' %}
+                    At least one artifact shows strong signs of manipulation or of being presented out of context.
+                {% elif case.fusion.verdict == 'COORDINATED_SYNTHETIC' %}
+                    Several artifacts show signs of manipulation and share traces that link them.
+                {% else %}
+                    {{ case.fusion.inconclusive_label or "The available evidence does not establish whether these artifacts are genuine." }}
+                {% endif %}
+            </div>
+            <div class="meta-row">
+                <span>Confidence: <strong>{{ case.fusion.confidence_level | upper }}</strong></span>
+                <span>Sufficiency: <strong>{{ case.fusion.checks_completed }} of {{ case.fusion.checks_applicable }} checks</strong></span>
+                {% if case.fusion.reason_codes %}
+                <span>Reason Codes: {{ case.fusion.reason_codes | join(', ') }}</span>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="section-title">Case Artifacts</div>
+        <ul>
+        {% for art in case.artifacts %}
+            <li><strong>{{ art.display_name | e }}</strong> ({{ art.modality | upper }}) &mdash; Status: {{ art.status | upper }}</li>
+        {% endfor %}
+        </ul>
+
+        <div class="section-title">Evidence Findings</div>
+        {% for art in case.artifacts %}
+            {% for item in art.evidence %}
+            <div class="evidence-card">
+                <div>
+                    <div class="ev-finding">{{ item.description | e }}</div>
+                    <div class="ev-meta">
+                        Artifact: {{ art.display_name | e }} | Direction: {{ item.direction | upper }} | Source: {{ item.source }} | Reference: <code>{{ item.evidence_ref.type }}: {{ item.evidence_ref.value }}</code>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        {% endfor %}
+
+        {% if case.fusion.limitations %}
+        <div class="limitations-box">
+            <strong>Investigation Limitations:</strong>
+            <ul>
+                {% for lim in case.fusion.limitations %}
+                <li>{{ lim | e }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        {% endif %}
+
+        <div class="footer">
+            Analysis was executed locally and on Gemini API. TrustLayers does not retain files after session deletion.
+        </div>
+    </div>
+</body>
+</html>

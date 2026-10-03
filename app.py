@@ -1,12 +1,12 @@
 import streamlit as st
+from ui.dashboard import main_dashboard
 
 st.set_page_config(
-    page_title="TrustLayers",
+    page_title="TrustLayers (T²)",
     page_icon="🛡️",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-st.title("TrustLayers")
-st.caption("Multimodal Digital Authenticity Investigation Tool")
-st.write("Initializing application skeleton...")
+if __name__ == "__main__":
+    main_dashboard()
