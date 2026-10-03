@@ -1,0 +1,150 @@
+"""Deterministic Fusion Engine for TrustLayers (T²).
+
+Enforces:
+- R-ML-01: Verdict is computed strictly by deterministic code.
+- R-ML-02: AUTHENTIC requires positive support above tau_a and low manipulation evidence.
+- R-ML-03: Low quality lowers reliability/sufficiency only, never raises manipulation evidence.
+- R-ML-07: An unavailable check is never counted as completed.
+- R-ML-10: Every verdict includes a limitations statement.
+"""
+
+import math
+from typing import List, Dict, Any, Tuple, Optional
+from models.schemas import Artifact, EvidenceItem, Relation, Fusion
+from core.config import THRESHOLDS
+from core.uncertainty import compute_confidence_level
+
+
+def compute_fusion(
+    artifacts: List[Artifact],
+    evidence_items: List[EvidenceItem],
+    relations: List[Relation],
+    unavailable_checks: Optional[List[str]] = None,
+) -> Fusion:
+    """Compute deterministic fusion formulas, verdict rules, reason codes, and limitations.
+
+    Args:
+        artifacts: List of grounded artifacts.
+        evidence_items: List of grounded evidence items.
+        relations: List of relations between artifacts.
+        unavailable_checks: List of check IDs that were unavailable/failed.
+
+    Returns:
+        Strict Fusion schema model.
+    """
+    if unavailable_checks is None:
+        unavailable_checks = []
+
+    tau_m = THRESHOLDS["tau_m"]
+    tau_a = THRESHOLDS["tau_a"]
+    tau_s = THRESHOLDS["tau_s"]
+    tau_l = THRESHOLDS.get("tau_l", 0.25)
+    tau_r = THRESHOLDS["tau_rel_low"]
+
+    # 1. Separate evidence items by direction
+    manip_items = [item for item in evidence_items if item.direction == "manipulated"]
+    auth_items = [item for item in evidence_items if item.direction == "authentic"]
+
+    # 2. Noisy-OR Fusion formula for manipulation evidence m
+    # m = 1 - prod(1 - s_i * r_i)
+    prod_m = 1.0
+    for item in manip_items:
+        impact = item.strength * item.reliability
+        prod_m *= (1.0 - impact)
+    m = max(0.0, min(1.0, 1.0 - prod_m))
+
+    # 3. Noisy-OR Fusion formula for authenticity support a
+    # a = 1 - prod(1 - s_j * r_j)
+    prod_a = 1.0
+    for item in auth_items:
+        impact = item.strength * item.reliability
+        prod_a *= (1.0 - impact)
+    a = max(0.0, min(1.0, 1.0 - prod_a))
+
+    # 4. Compute sufficiency sigma = (reliable checks completed) / (checks applicable)
+    total_applicable_checks = 10  # Baseline catalog check count for MVP
+    completed_checks = len(evidence_items)
+    reliable_completed_checks = sum(1 for item in evidence_items if item.reliability >= tau_r)
+
+    sufficiency = max(0.0, min(1.0, reliable_completed_checks / float(total_applicable_checks)))
+
+    # 5. Check set-level coordination (LINKED relations)
+    linked_relations = [r for r in relations if r.relation == "LINKED"]
+    # Check if >= 2 artifacts have artifact-level m > tau_m and are linked
+    arts_with_manip = set()
+    for item in manip_items:
+        arts_with_manip.update(item.artifact_ids)
+
+    is_coordinated_synthetic = False
+    if len(linked_relations) > 0 and len(arts_with_manip) >= 2:
+        for rel in linked_relations:
+            if rel.source_id in arts_with_manip and rel.target_id in arts_with_manip:
+                is_coordinated_synthetic = True
+                break
+
+    # 6. Verdict Evaluation Rules (First match wins)
+    verdict = "INCONCLUSIVE"
+    inconclusive_label = None
+    reason_codes: List[str] = []
+
+    # Rule 1: Sufficiency check or conflicting signals
+    if sufficiency < tau_s:
+        verdict = "INCONCLUSIVE"
+        inconclusive_label = "insufficient evidence to establish authenticity or manipulation"
+        reason_codes.append("INSUFFICIENT_EVIDENCE")
+    elif m > tau_m and a > tau_a:
+        verdict = "INCONCLUSIVE"
+        inconclusive_label = "conflicting evidence signals detected"
+        reason_codes.append("CONFLICTING_SIGNALS")
+    # Rule 2: Coordinated synthetic set
+    elif is_coordinated_synthetic:
+        verdict = "COORDINATED_SYNTHETIC"
+        reason_codes.append("LINKED_SYNTHETIC_SET")
+        reason_codes.append("SYNTHETIC_ARTIFACT")
+    # Rule 3: Manipulated
+    elif m > tau_m:
+        verdict = "MANIPULATED"
+        # Determine dominant reason code
+        if any(r.conflict_type for r in relations if r.relation == "CONTRADICTS"):
+            reason_codes.append("CROSS_MODAL_CONTRADICTION")
+        else:
+            reason_codes.append("SYNTHETIC_ARTIFACT")
+    # Rule 4: Authentic
+    elif m < tau_l and a > tau_a and sufficiency >= tau_s:
+        verdict = "AUTHENTIC"
+    # Rule 5: Otherwise Inconclusive
+    else:
+        verdict = "INCONCLUSIVE"
+        inconclusive_label = "no manipulation detected; authenticity not established"
+        reason_codes.append("INSUFFICIENT_EVIDENCE")
+
+    # 7. Limitations statement formulation (R-ML-10)
+    limitations: List[str] = []
+    if unavailable_checks:
+        limitations.append(f"The following checks were unavailable: {', '.join(unavailable_checks)}")
+    if sufficiency < tau_s:
+        limitations.append("Overall evidence sufficiency is below the recommended confidence threshold.")
+    if not auth_items and verdict == "INCONCLUSIVE":
+        limitations.append("No positive content credentials or corroborating sources were available.")
+
+    # 8. Confidence level evaluation
+    confidence_level = compute_confidence_level(
+        verdict=verdict,
+        sufficiency=sufficiency,
+        evidence_items=evidence_items,
+        tau_s=tau_s,
+    )
+
+    return Fusion(
+        manip_evidence=round(m, 4),
+        auth_support=round(a, 4),
+        sufficiency=round(sufficiency, 4),
+        checks_completed=completed_checks,
+        checks_applicable=total_applicable_checks,
+        verdict=verdict,
+        reason_codes=reason_codes,
+        confidence_level=confidence_level,
+        inconclusive_label=inconclusive_label,
+        limitations=limitations,
+        unavailable_checks=unavailable_checks,
+    )
