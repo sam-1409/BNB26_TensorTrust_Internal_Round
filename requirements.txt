@@ -1,0 +1,13 @@
+streamlit>=1.45.0
+pydantic>=2.0
+google-genai>=0.1.0
+c2pa-python
+opencv-python-headless
+pillow
+pymupdf
+jinja2
+spacy
+python-dotenv
+pytest
+ruff
+mypy
