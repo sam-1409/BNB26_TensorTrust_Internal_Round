@@ -1,4 +1,4 @@
-"""Streamlit UI dashboard for TrustLayers (T²).
+"""Streamlit UI dashboard for TrustLayers.
 
 Enforces:
 - R-UX-01 to R-UX-10: Strict adherence to visual and interaction design rules.
@@ -6,63 +6,87 @@ Enforces:
 - R-DATA-06: Shows processing notice before first analysis in session.
 """
 
+import base64
 import uuid
 import streamlit as st
 from typing import List, Dict, Any
 
-from core.config import GEMINI_TIER, ALL_SUPPORTED_MIME_TYPES
+from core.config import GEMINI_TIER, ALL_SUPPORTED_MIME_TYPES, BASE_DIR
 from models.schemas import CaseInput, Case, ProgressEvent
 from core.orchestrator import run_case, delete_case
 from services.report import generate_report_html
 
 
 def render_header():
-    """Render top brand header and wordmark."""
+    """Render top brand header with logo and wordmark."""
+    logo_path = BASE_DIR / "assets" / "logo.png"
+    logo_html = ""
+    if logo_path.exists():
+        b64_logo = base64.b64encode(logo_path.read_bytes()).decode("utf-8")
+        logo_html = f'<img src="data:image/png;base64,{b64_logo}" class="tl-logo" alt="TrustLayers Logo" />'
+
     st.markdown(
-        """
+        f"""
         <style>
-        .t2-wordmark {
+        .brand-header {{
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 2px;
+        }}
+        .tl-logo {{
+            width: 36px;
+            height: 36px;
+            object-fit: contain;
+            display: block;
+        }}
+        .tl-wordmark {{
             font-family: 'Plus Jakarta Sans', sans-serif;
             font-weight: 800;
             font-size: 28px;
-            color: #1C2832;
-            margin-bottom: 0px;
-        }
-        .t2-caption {
+            color: #1C1B1F;
+            margin: 0;
+            line-height: 1;
+        }}
+        .tl-caption {{
             font-size: 14px;
-            color: #4E5B66;
+            color: #49454F;
+            margin-top: 4px;
             margin-bottom: 24px;
-        }
-        .verdict-box-authentic {
-            border-left: 5px solid #2B6A4E;
-            background-color: #F7F8F9;
+        }}
+        .verdict-box-authentic {{
+            border-left: 5px solid #1E6E4E;
+            background-color: #F7F2FA;
             padding: 16px;
             margin-bottom: 20px;
-        }
-        .verdict-box-manipulated {
-            border-left: 5px solid #A4382A;
-            background-color: #F7F8F9;
+        }}
+        .verdict-box-manipulated {{
+            border-left: 5px solid #B3261E;
+            background-color: #F7F2FA;
             padding: 16px;
             margin-bottom: 20px;
-        }
-        .verdict-box-coordinated {
-            border-left: 5px solid #8A4A10;
-            background-color: #F7F8F9;
+        }}
+        .verdict-box-coordinated {{
+            border-left: 5px solid #7D5700;
+            background-color: #F7F2FA;
             padding: 16px;
             margin-bottom: 20px;
-        }
-        .verdict-box-inconclusive {
-            border-left: 5px solid #465766;
-            background-color: #F7F8F9;
+        }}
+        .verdict-box-inconclusive {{
+            border-left: 5px solid #49454F;
+            background-color: #F7F2FA;
             padding: 16px;
             margin-bottom: 20px;
-        }
+        }}
         </style>
+        <div class="brand-header">
+            {logo_html}
+            <span class="tl-wordmark">TrustLayers</span>
+        </div>
+        <div class="tl-caption">Multimodal Digital Authenticity Investigation Tool</div>
         """,
         unsafe_allow_html=True,
     )
-    st.markdown('<div class="t2-wordmark">T² TrustLayers</div>', unsafe_allow_html=True)
-    st.markdown('<div class="t2-caption">Multimodal Digital Authenticity Investigation Tool</div>', unsafe_allow_html=True)
 
 
 def render_processing_notice():
@@ -184,7 +208,7 @@ def render_result_screen(case: Case):
         st.caption("Rule-based internal scores. They are not probabilities.")
         st.write(f"- Manipulation score ($m$): `{fusion.manip_evidence:.4f}`")
         st.write(f"- Authenticity score ($a$): `{fusion.auth_support:.4f}`")
-        st.write(f"- Sufficiency ($\sigma$): `{fusion.sufficiency:.4f}`")
+        st.write(f"- Sufficiency ($\\sigma$): `{fusion.sufficiency:.4f}`")
 
     # 3. Top Evidence Cards
     st.subheader("Top Evidence Findings")
