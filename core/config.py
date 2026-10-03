@@ -6,7 +6,7 @@ per RULES R-CODE-03.
 
 import os
 from pathlib import Path
-from typing import Final, Dict, Set, List
+from typing import Final, Dict, Set, List, Any
 
 # Environment Settings
 GEMINI_API_KEY: Final[str] = os.environ.get("GEMINI_API_KEY", "")
@@ -77,3 +77,55 @@ STRENGTH_CLASS_WEIGHTS: Final[Dict[str, float]] = {
 # Timeout Limits
 STAGE_TIMEOUT_SECONDS: Final[int] = 120
 LLM_RETRY_COUNT: Final[int] = 1
+
+# Check Catalog (Mapping check IDs to modalities, constraints, and enablement)
+CHECK_CATALOG: Final[Dict[str, Dict[str, Any]]] = {
+    "CHK_IMG_EXIF_SOFTWARE": {
+        "description": "EXIF software tag generative/editing markers",
+        "modalities": ["image"],
+        "min_artifacts": 1,
+        "enabled": True,
+    },
+    "CHK_IMG_C2PA_VALID": {
+        "description": "C2PA content credential manifest verification",
+        "modalities": ["image"],
+        "min_artifacts": 1,
+        "enabled": True,
+    },
+    "CHK_TXT_PDF_PROVENANCE": {
+        "description": "PDF metadata creator and producer forensics",
+        "modalities": ["document"],
+        "min_artifacts": 1,
+        "enabled": True,
+    },
+    "CHK_CROSS_DATE": {
+        "description": "Cross-artifact timeline consistency check",
+        "modalities": ["image", "text"],
+        "min_artifacts": 2,
+        "enabled": True,
+    },
+    "CHK_CROSS_CAPTION": {
+        "description": "Cross-modal semantic caption and visual consistency",
+        "modalities": ["image", "text"],
+        "min_artifacts": 2,
+        "enabled": True,
+    },
+    "CHK_CROSS_AV_SYNC": {
+        "description": "Video-audio synchronization and speech alignment",
+        "modalities": ["video", "audio"],
+        "min_artifacts": 2,
+        "enabled": True,
+    },
+    "CHK_AUDIO_ASR": {
+        "description": "Audio transcription and acoustic analysis",
+        "modalities": ["audio"],
+        "min_artifacts": 1,
+        "enabled": True,
+    },
+    "CHK_COORD_PERCEPTUAL": {
+        "description": "Perceptual hashing and coordination across artifacts",
+        "modalities": ["image"],
+        "min_artifacts": 2,
+        "enabled": True,
+    },
+}

@@ -11,8 +11,81 @@ Enforces:
 import math
 from typing import List, Dict, Any, Tuple, Optional
 from models.schemas import Artifact, EvidenceItem, Relation, Fusion
-from core.config import THRESHOLDS
+from core.config import THRESHOLDS, CHECK_CATALOG
 from core.uncertainty import compute_confidence_level
+
+
+def compute_applicable_checks(
+    artifacts: List[Artifact],
+    catalog: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> int:
+    """Compute the count of applicable checks from the check catalog for the given artifacts.
+
+    A check is applicable if and only if:
+    1. The check is enabled in the catalog (enabled != False).
+    2. The case contains at least the min_artifacts total valid artifacts required.
+    3. All required modalities for the check are present among valid artifacts.
+       - A required modality of "text" is satisfied by either "text" or "document" (PDF text).
+       - Modality-specific artifact count minimums (e.g., min_artifacts=2 on single-modality
+         checks like perceptual coordination) are strictly checked against modality counts.
+
+    Args:
+        artifacts: List of ingested Artifact objects.
+        catalog: Optional catalog dictionary. Defaults to CHECK_CATALOG from core.config.
+
+    Returns:
+        Integer count of dynamically applicable checks.
+    """
+    if catalog is None:
+        catalog = CHECK_CATALOG
+
+    valid_arts = [a for a in artifacts if a.status in ("ok", "pending", "degraded")]
+    if not valid_arts:
+        return 0
+
+    modality_counts: Dict[str, int] = {}
+    for a in valid_arts:
+        modality_counts[a.modality] = modality_counts.get(a.modality, 0) + 1
+
+    case_modalities = set(modality_counts.keys())
+    total_valid_arts = len(valid_arts)
+
+    applicable_count = 0
+    for check_id, check_def in catalog.items():
+        if not check_def.get("enabled", True):
+            continue
+
+        req_modalities = check_def.get("modalities", [])
+        min_artifacts = check_def.get("min_artifacts", 1)
+
+        # Check overall artifact count requirement
+        if total_valid_arts < min_artifacts:
+            continue
+
+        # Check required modalities
+        applies = True
+        for req_mod in req_modalities:
+            if req_mod == "text":
+                if not (case_modalities & {"text", "document"}):
+                    applies = False
+                    break
+            else:
+                if req_mod not in case_modalities:
+                    applies = False
+                    break
+
+        if not applies:
+            continue
+
+        # For single-modality checks requiring multiple artifacts (e.g. coordination across >=2 images)
+        if len(req_modalities) == 1 and min_artifacts > 1:
+            req_mod = req_modalities[0]
+            if modality_counts.get(req_mod, 0) < min_artifacts:
+                continue
+
+        applicable_count += 1
+
+    return applicable_count
 
 
 def compute_fusion(
@@ -20,6 +93,7 @@ def compute_fusion(
     evidence_items: List[EvidenceItem],
     relations: List[Relation],
     unavailable_checks: Optional[List[str]] = None,
+    catalog: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> Fusion:
     """Compute deterministic fusion formulas, verdict rules, reason codes, and limitations.
 
@@ -28,6 +102,7 @@ def compute_fusion(
         evidence_items: List of grounded evidence items.
         relations: List of relations between artifacts.
         unavailable_checks: List of check IDs that were unavailable/failed.
+        catalog: Optional check catalog dictionary override.
 
     Returns:
         Strict Fusion schema model.
@@ -62,11 +137,14 @@ def compute_fusion(
     a = max(0.0, min(1.0, 1.0 - prod_a))
 
     # 4. Compute sufficiency sigma = (reliable checks completed) / (checks applicable)
-    total_applicable_checks = 10  # Baseline catalog check count for MVP
+    total_applicable_checks = compute_applicable_checks(artifacts, catalog=catalog)
     completed_checks = len(evidence_items)
     reliable_completed_checks = sum(1 for item in evidence_items if item.reliability >= tau_r)
 
-    sufficiency = max(0.0, min(1.0, reliable_completed_checks / float(total_applicable_checks)))
+    if total_applicable_checks > 0:
+        sufficiency = max(0.0, min(1.0, reliable_completed_checks / float(total_applicable_checks)))
+    else:
+        sufficiency = 0.0
 
     # 5. Check set-level coordination (LINKED relations)
     linked_relations = [r for r in relations if r.relation == "LINKED"]
