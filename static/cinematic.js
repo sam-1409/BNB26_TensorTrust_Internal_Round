@@ -758,11 +758,14 @@
     if (active) {
       const t = clock.getElapsedTime();
       if (view === "home") {
+        // Frame the whole evidence group to the right so the hero headline stays clear.
+        // Nodes keep the same relative layout; only the parent scene is translated.
+        scene.position.x = mobile ? 0 : tablet ? 1.2 : 2.05;
         scrollP = 0.045;
         targetP = 0.045;
         applyScene(0.045, t);
       } else if (view === "running") {
-        // Continuous lerp + applyScene — same motion feel as the old Home scroll cinema.
+        scene.position.x = 0;
         if (storyPlaying) {
           const u = Math.min(1, (performance.now() - storyStart) / storyDuration);
           targetP = storyFrom + (storyTo - storyFrom) * easeInOut(u);
@@ -816,6 +819,7 @@
       storyPlaying = false;
       storyCaptions = [];
       hideLiveCaption();
+      if (scene) scene.position.x = 0;
       DOC.querySelectorAll(".tl-cap").forEach((el) => {
         el.classList.remove("is-on");
         el.style.visibility = "hidden";

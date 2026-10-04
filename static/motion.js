@@ -1,12 +1,12 @@
 (() => {
   const DOC = document;
   const WIN = window;
-  if (WIN.__tlMotionBooted && WIN.__tlMotionVersion === "flow-v5") {
+  if (WIN.__tlMotionBooted && WIN.__tlMotionVersion === "flow-v6") {
     WIN.__tlCinemaRefresh && WIN.__tlCinemaRefresh();
     return;
   }
   WIN.__tlMotionBooted = true;
-  WIN.__tlMotionVersion = "flow-v5";
+  WIN.__tlMotionVersion = "flow-v6";
 
   function loadScript(src, id) {
     return new Promise((resolve, reject) => {
