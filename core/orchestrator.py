@@ -106,7 +106,11 @@ def run_case(
                 updated_art, evidence_items = analyze_pdf_document(art, file_path)
 
             # 3. Semantic Claim & Entity Extraction (Phase 2)
-            updated_art, sem_evidence = analyze_artifact_semantics(updated_art, llm_client=llm_client)
+            updated_art, sem_evidence = analyze_artifact_semantics(
+                updated_art,
+                llm_client=llm_client,
+                investigation_query=case_input.investigation_query,
+            )
             evidence_items.extend(sem_evidence)
 
             processed_artifacts.append(updated_art)
@@ -141,7 +145,9 @@ def run_case(
         det_relations = run_deterministic_pair_checks(processed_artifacts)
         coord_relations = detect_coordination(processed_artifacts)
         cm_relations, cm_ev_items, cross_modal_activated = run_cross_modal_reasoning(
-            processed_artifacts, llm_client=llm_client
+            processed_artifacts,
+            llm_client=llm_client,
+            investigation_query=case_input.investigation_query,
         )
 
         # Ground any cross-modal evidence items

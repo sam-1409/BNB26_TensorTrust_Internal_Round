@@ -29,9 +29,10 @@ class GeminiClient:
     """Client for Google Gemini API with schema-locked JSON output and disk caching."""
 
     def __init__(self, cache_dir: Optional[Path] = None):
-        self.api_key = GEMINI_API_KEY or os.environ.get("GEMINI_API_KEY", "")
-        self.model_id = GEMINI_MODEL
-        self.tier = GEMINI_TIER
+        import core.config as cfg
+        self.api_key = os.environ.get("GEMINI_API_KEY", "") or cfg.GEMINI_API_KEY
+        self.model_id = os.environ.get("GEMINI_MODEL", "") or cfg.GEMINI_MODEL
+        self.tier = os.environ.get("GEMINI_TIER", "") or cfg.GEMINI_TIER
         self.cache_dir = cache_dir
 
         if self.cache_dir:
@@ -76,6 +77,8 @@ class GeminiClient:
         prompt: str,
         content_data: Optional[bytes] = None,
         mime_type: Optional[str] = None,
+        extra_content_data: Optional[bytes] = None,
+        extra_mime_type: Optional[str] = None,
         artifact_sha256: str = "none",
         prompt_version: str = "v1",
         schema_version: str = "v1",
@@ -106,21 +109,46 @@ class GeminiClient:
 
             client = genai.Client(api_key=self.api_key)
 
-            contents = [prompt]
+            # Build contents: image bytes BEFORE the text prompt for best Gemini performance
+            contents = []
             if content_data and mime_type:
                 contents.append(
                     types.Part.from_bytes(data=content_data, mime_type=mime_type)
                 )
+            if extra_content_data and extra_mime_type:
+                contents.append(
+                    types.Part.from_bytes(data=extra_content_data, mime_type=extra_mime_type)
+                )
+            contents.append(prompt)
 
             config = types.GenerateContentConfig(
                 response_mime_type="application/json",
             )
 
-            response = client.models.generate_content(
-                model=self.model_id,
-                contents=contents,
-                config=config,
-            )
+            from core.config import GEMINI_FALLBACK_MODELS
+            models_to_try = [self.model_id] + [m for m in GEMINI_FALLBACK_MODELS if m != self.model_id]
+            last_err = None
+            response = None
+
+            for mod in models_to_try:
+                try:
+                    response = client.models.generate_content(
+                        model=mod,
+                        contents=contents,
+                        config=config,
+                    )
+                    break
+                except Exception as call_err:
+                    last_err = call_err
+                    call_err_str = str(call_err)
+                    # If model is 503 UNAVAILABLE or high demand or not found, try fallback model
+                    if any(kw in call_err_str for kw in ("503", "UNAVAILABLE", "high demand", "404", "NOT_FOUND", "429")):
+                        continue
+                    else:
+                        raise call_err
+
+            if response is None:
+                raise last_err or Exception("All Gemini models failed")
 
             response_text = response.text or "{}"
             parsed_json = json.loads(response_text)

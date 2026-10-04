@@ -24,6 +24,8 @@ def verify_evidence_ref(ref: EvidenceRef, artifact: Artifact) -> bool:
     metadata = artifact.metadata or {}
 
     if ref_type == "frame":
+        if artifact.modality == "image":
+            return bool(val)
         try:
             frame_idx = int(val)
             total_frames = metadata.get("total_frames", metadata.get("sampled_frames_count", 0))
