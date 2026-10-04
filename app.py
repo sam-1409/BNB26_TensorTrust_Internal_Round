@@ -1,3 +1,7 @@
+from dotenv import load_dotenv
+
+load_dotenv()
+
 from PIL import Image
 import streamlit as st
 from ui.dashboard import main_dashboard
@@ -10,7 +14,8 @@ st.set_page_config(
     page_title="TrustLayers",
     page_icon=favicon,
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
+    menu_items={"Get help": None, "Report a bug": None, "About": "TrustLayers investigation workbench"},
 )
 
 if __name__ == "__main__":
