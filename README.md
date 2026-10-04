@@ -32,6 +32,21 @@ TrustLayers approaches verification as a **holistic investigation across multipl
 - **Dual-Axis Evidence Accounting**: Keeps manipulation evidence ($m$) and authenticity support ($a$) on separate axes rather than conflating them into a single percentage.
 - **Explicit Limitations & Quality Gates**: Analyzes the reliability of incoming media (resolution, compression, noise, transcription confidence) and surfaces what could *not* be verified directly in the UI.
 - **Self-Contained Report Export**: Exports complete, standalone HTML investigation reports with cryptographic artifact hashes, grounded evidence cards, and investigation provenance.
+- **Evidence Graph**: Builds a typed graph connecting artifacts, claims, entities, sources, and evidence relationships such as SUPPORTS, CONTRADICTS, MATCHES, and LINKED TO.
+- **Conditional Cross-Modal Reasoning**: Connects relevant image, video, audio, and text evidence only when multiple applicable modalities are present; timestamp differences alone are never treated as manipulation evidence.
+- **Semantic Artifact Analysis**: Uses Gemini for structured claim/entity/observation extraction while keeping final adjudication deterministic.
+- **Audio / Video ASR**: Supports Gemini-based transcription for standalone audio and extracted video audio with grounded timestamp references.
+- **Coordination & Near-Duplicate Detection**: Detects exact duplicates, perceptual near-duplicates, repost-like text similarity, and coordinated synthetic indicators without treating duplicates as independent corroboration.
+- **Cross-Platform Investigation**: Supports real YouTube Data API v3 investigation with metadata and comment evidence, with an extensible platform adapter architecture.
+
+### Cross-Platform Evidence
+
+- **YouTube Data API v3** is the current concrete external platform integration.
+- Metadata and comments can be retrieved when the API key is configured.
+- Comments are treated as weak contextual evidence, not ground truth.
+- The platform architecture is extensible for additional legitimate APIs.
+- Direct scraping of Instagram and X (Twitter) is not implemented.
+- Search-engine results are not treated as authoritative evidence.
 
 ---
 
@@ -67,20 +82,30 @@ flowchart TD
 
     subgraph Modality_Adapters [Artifact Adapters]
         PROF --> AD_IMG[Image Adapter: EXIF, C2PA, Forensics]
-        PROF --> AD_VID[Video Adapter: Frame & Audio Sampler]
-        PROF --> AD_AUD[Audio Adapter: Local ASR & Anti-Spoof]
+        PROF --> AD_VID[Video Adapter: Frame & Audio Extraction]
+        PROF --> AD_AUD[Audio Adapter: Audio Processing & ASR]
         PROF --> AD_TXT[Text / PDF Adapter: Claims & PyMuPDF]
     end
 
     subgraph Reasoning_Engine [Reasoning & Verification]
-        AD_IMG & AD_VID & AD_AUD & AD_TXT --> GRD[Grounding Verifier]
-        GRD --> DET[Deterministic Cross-Checks]
-        GRD --> COORD[Set-Level Coordination Detection]
-        DET & COORD -. semantic extraction .-> LLM[(Gemini API Client)]
+        AD_IMG & AD_VID & AD_AUD & AD_TXT --> SEM[Artifact Semantic Analysis]
+        SEM --> GRD[Grounding & Evidence Normalization]
+        GRD --> DET[Deterministic Checks]
+        GRD --> XMOD[Conditional Cross-Modal Reasoning]
+        GRD --> COORD[Coordination & Near-Duplicate Detection]
+        GRD --> PLAT[Cross-Platform Investigation: YouTube API]
+        DET & XMOD & COORD & PLAT --> EGR[Evidence Graph: Supports / Contradicts / Matches]
+    end
+
+    subgraph External_Services [External Services (Extraction & Correlation Only)]
+        LLM[(Gemini API Client)]
+        AD_AUD -. ASR transcription .-> LLM
+        SEM -. semantic extraction .-> LLM
+        XMOD -. cross-modal adjudication .-> LLM
     end
 
     subgraph Fusion_Layer [Deterministic Fusion]
-        DET & COORD --> FUS[Fusion Engine & Abstention Gate]
+        EGR --> FUS[Fusion Engine & Abstention Gate]
         FUS --> VERD[Final Verdict, Sufficiency & Confidence]
         VERD --> ST
     end
@@ -171,9 +196,12 @@ Create a `.env` file or export the following environment variables:
 |---|---|---|---|
 | `GEMINI_API_KEY` | Yes (for live cases) | `""` | Gemini API key from Google AI Studio or Vertex AI |
 | `GEMINI_MODEL` | No | `gemini-3.8-flash` | Gemini model name for semantic extraction |
-| `GEMINI_TIER` | No | `paid` | Set to `paid` for live uploads, or `free` to run preloaded sample cases |
+| `GEMINI_TIER` | No | `paid` | Optional Gemini usage tier (`free` or `paid`) matching the billing and rate-limit configuration of the API key |
+| `YOUTUBE_API_KEY` | No | `""` | YouTube Data API v3 key for live cross-platform investigation |
 | `APP_MODE` | No | `interactive` | `interactive` for Streamlit dashboard, `eval` for benchmark runs |
 | `TRUSTLAYERS_DATA_DIR` | No | `data/` | Root directory for local session files and SQLite caches |
+
+> The `.env` file belongs in the repository root and must never be committed. It is protected by `.gitignore`.
 
 ### Running the Application
 
@@ -200,6 +228,27 @@ python -m eval.run_eval --split dev
 - **Macro-F1**: Balances classification performance across authentic, manipulated, and coordinated categories.
 - **Coverage Rate**: Proportion of cases where the system reaches an affirmative verdict rather than abstaining.
 - **False-Confidence Rate**: Safety metric tracking cases where the system returned an incorrect verdict with `high` confidence. Target is `0.00`.
+
+### Current Benchmark Results
+
+The evaluation benchmark contains:
+- 24 labeled cases
+- 14 development cases
+- 10 held-out cases
+- Independent-artifact baseline comparison
+- Held-out evaluation with frozen thresholds
+
+| Split | Baseline Macro-F1 | TrustLayers Macro-F1 | Improvement |
+|---|---:|---:|---:|
+| Dev | 0.1483 | 0.5338 | +0.3855 |
+| Held-out | 0.1556 | 0.5298 | +0.3742 |
+| All 24 | 0.1515 | 0.5358 | +0.3843 |
+
+- **Baseline coverage**: 20.8%
+- **TrustLayers coverage**: 37.5%
+- **False-confidence rate**: 0.00
+
+> These are measured benchmark results for the current evaluation set and should not be interpreted as guarantees of real-world performance.
 
 > [!NOTE]
 > Evaluation benchmarks in the development set are intentionally compact. Benchmark metrics should be interpreted as diagnostic indicators rather than statistical guarantees across all real-world distributions.
@@ -235,6 +284,9 @@ BNB26_TensorTrust_Internal_Round/
 │   ├── reliability.py      # Quality profiler and gatekeeper
 │   └── uncertainty.py      # Sufficiency and confidence evaluation
 ├── eval/                   # Benchmark evaluation harness
+│   ├── baseline.py         # Independent-artifact baseline
+│   ├── benchmark/          # Benchmark manifest/cases
+│   ├── metrics.py          # Evaluation metrics
 │   └── run_eval.py         # Headless evaluation runner
 ├── ingest/                 # File ingestion and validation
 │   ├── hasher.py           # SHA-256 deduplication
@@ -244,11 +296,15 @@ BNB26_TensorTrust_Internal_Round/
 ├── models/                 # Pydantic schemas
 │   └── schemas.py          # Case, Artifact, Evidence, and Fusion schemas
 ├── reasoning/              # Cross-modal reasoning and adjudication
+│   ├── artifact_analyzer.py # Structured semantic artifact analysis
 │   ├── coordination.py     # Set-level coordination detector
+│   ├── cross_modal.py      # Conditional cross-modal reasoning
 │   ├── deterministic_checks.py # Cross-artifact correlation checks
+│   ├── evidence_graph.py   # Evidence graph construction and contradictions
 │   └── grounding.py        # Resolvable reference verifier
 ├── services/               # Supporting infrastructure services
 │   ├── llm_client.py       # Gemini API client with caching
+│   ├── platform_client.py  # External platform investigation clients
 │   ├── report.py           # HTML report engine
 │   └── storage.py          # Session and working SQLite storage
 ├── templates/              # HTML report templates
@@ -280,6 +336,25 @@ For detailed architecture, design specifications, and implementation guidelines,
 | [TASKS.md](file:///.claude/TASKS.md) | Implementation task roadmap and verification criteria |
 | [TESTING.md](file:///.claude/TESTING.md) | Test layers, regression invariants, and acceptance scenarios |
 | [MEMORY.md](file:///.claude/MEMORY.md) | Design decisions log, resolved ambiguities, and open questions |
+
+### Current Status
+
+TrustLayers' core evidence reasoning pipeline is implemented and tested.
+
+Current validation:
+- 84 tests passing
+- 0 test failures
+- 24-case evaluation benchmark
+- development and held-out evaluation
+- independent-artifact baseline comparison
+
+Live external services require their corresponding API keys:
+- Gemini for live semantic/ASR functionality
+- YouTube Data API for live YouTube investigation
+
+FFmpeg/ffprobe may need to be installed on the host system for video/audio stream extraction.
+
+Additional platform integrations such as Instagram and X/Twitter remain future extensions through legitimate APIs rather than unauthorized scraping.
 
 ---
 
