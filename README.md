@@ -63,74 +63,8 @@ TrustLayers outputs one of four distinct verdicts for every analyzed case:
 
 ---
 
-## System Architecture
-
-TrustLayers employs a layered architecture separating untrusted uploads, local deterministic processing, and external semantic extraction:
-
-```mermaid
-flowchart TD
-    subgraph UI_Layer [User Interface]
-        U[Browser] --> ST[Streamlit Dashboard / UI Router]
-        ST --> RPT[HTML Report Generator]
-    end
-
-    subgraph Core_Pipeline [Core Orchestration & Ingest]
-        ST --> ORCH[Pipeline Orchestrator]
-        ORCH --> ING[Ingest: Type Verifier & SHA-256 Hasher]
-        ING --> PROF[Reliability & Quality Profiler]
-    end
-
-    subgraph Modality_Adapters [Artifact Adapters]
-        PROF --> AD_IMG[Image Adapter: EXIF, C2PA, Forensics]
-        PROF --> AD_VID[Video Adapter: Frame & Audio Extraction]
-        PROF --> AD_AUD[Audio Adapter: Audio Processing & ASR]
-        PROF --> AD_TXT[Text / PDF Adapter: Claims & PyMuPDF]
-    end
-
-    subgraph Reasoning_Engine [Reasoning & Verification]
-        AD_IMG & AD_VID & AD_AUD & AD_TXT --> SEM[Artifact Semantic Analysis]
-        SEM --> GRD[Grounding & Evidence Normalization]
-        GRD --> DET[Deterministic Checks]
-        GRD --> XMOD[Conditional Cross-Modal Reasoning]
-        GRD --> COORD[Coordination & Near-Duplicate Detection]
-        GRD --> PLAT[Cross-Platform Investigation: YouTube API]
-        DET & XMOD & COORD & PLAT --> EGR[Evidence Graph: Supports / Contradicts / Matches]
-    end
-
-    subgraph External_Services [External Services (Extraction & Correlation Only)]
-        LLM[(Gemini API Client)]
-        AD_AUD -. ASR transcription .-> LLM
-        SEM -. semantic extraction .-> LLM
-        XMOD -. cross-modal adjudication .-> LLM
-    end
-
-    subgraph Fusion_Layer [Deterministic Fusion]
-        EGR --> FUS[Fusion Engine & Abstention Gate]
-        FUS --> VERD[Final Verdict, Sufficiency & Confidence]
-        VERD --> ST
-    end
-```
-
 ### Trust Boundaries & Privacy
 
-```mermaid
-flowchart LR
-    subgraph Untrusted_Input [Untrusted Zone]
-        F[Uploaded Media Files]
-    end
-    subgraph Local_Process [Local Machine & Session Store]
-        V[Magic-Byte Validation] --> P[Preprocessing & Local Analyzers]
-        P --> E[Evidence Store]
-        E --> D[Deterministic Fusion Engine]
-    end
-    subgraph External_Service [Cloud Services]
-        G[Google Gemini API]
-    end
-
-    F --> V
-    P -- sampled frames, audio snippets, text chunks --> G
-    G -- schema-validated JSON --> E
-```
 
 1. **Local-First Processing**: Ingest validation, duplicate hashing, metadata extraction, quality gates, and final verdict fusion run strictly on your local machine.
 2. **Minimal Cloud Surface**: Only preprocessed content required for semantic analysis leaves the machine to Google's Gemini API.
