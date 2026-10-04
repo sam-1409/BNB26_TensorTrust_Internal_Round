@@ -72,18 +72,41 @@ def analyze_image(artifact: Artifact, file_path: Path) -> Tuple[Artifact, List[E
             exif = extract_exif(img)
             metadata["exif"] = exif
 
-            # Check EXIF software tag for generative / editing tools
+            # Compute perceptual dHash for near-duplicate and coordination detection
+            from reasoning.coordination import compute_dhash
+            phash = compute_dhash(img)
+            metadata["perceptual_hash"] = phash
+
+            # Check EXIF software tag for generative / editing tools or camera hardware
             software = str(exif.get("Software", "")).lower()
-            if any(term in software for term in ("photoshop", "gimp", "midjourney", "stable diffusion", "dall-e")):
+            is_ai = any(term in software for term in ("midjourney", "stable diffusion", "dall-e", "comfyui"))
+            is_edit = any(term in software for term in ("photoshop", "gimp"))
+
+            if is_ai or is_edit:
                 ev = EvidenceItem(
                     id=f"ev_img_sw_{artifact.id}",
                     artifact_ids=[artifact.id],
                     direction="manipulated",
-                    strength=STRENGTH_CLASS_WEIGHTS["weak"],  # Provenance anomaly is supporting only (R-ML-05)
-                    reliability=0.8,
+                    strength=STRENGTH_CLASS_WEIGHTS["strong"] if is_ai else STRENGTH_CLASS_WEIGHTS["weak"],
+                    reliability=0.85,
                     scope="artifact",
                     evidence_ref=EvidenceRef(type="region", value="metadata"),
-                    description=f"EXIF metadata indicates software modification: {exif.get('Software')}",
+                    description=f"EXIF metadata indicates {'synthetic AI generation' if is_ai else 'software modification'}: {exif.get('Software')}",
+                    source="forensic",
+                    check_id="CHK_IMG_EXIF_SOFTWARE",
+                )
+                evidence_list.append(ev)
+            elif exif.get("Software") or exif.get("Model") or exif.get("Make"):
+                hw_name = exif.get("Software") or exif.get("Model") or exif.get("Make") or "Camera"
+                ev = EvidenceItem(
+                    id=f"ev_img_sw_{artifact.id}",
+                    artifact_ids=[artifact.id],
+                    direction="authentic",
+                    strength=STRENGTH_CLASS_WEIGHTS["moderate"],
+                    reliability=0.85,
+                    scope="artifact",
+                    evidence_ref=EvidenceRef(type="region", value="metadata"),
+                    description=f"EXIF metadata indicates authentic capture hardware: {hw_name}",
                     source="forensic",
                     check_id="CHK_IMG_EXIF_SOFTWARE",
                 )
@@ -120,6 +143,7 @@ def analyze_image(artifact: Artifact, file_path: Path) -> Tuple[Artifact, List[E
             art_dict["metadata"] = metadata
             art_dict["reliability"] = reliability
             art_dict["evidence"] = evidence_list
+            art_dict["perceptual_hash"] = phash
             updated_artifact = Artifact(**art_dict)
 
             return updated_artifact, evidence_list

@@ -137,10 +137,16 @@ def render_upload_screen():
         placeholder="Captions, claims, or where the files came from...",
     )
 
+    platform_urls_input = st.text_area(
+        "External Platform URLs (Optional - YouTube or Reddit)",
+        placeholder="https://www.youtube.com/watch?v=...\nhttps://reddit.com/r/...",
+    )
+    platform_urls = [line.strip() for line in platform_urls_input.splitlines() if line.strip()]
+
     st.markdown("---")
     render_processing_notice()
 
-    analyze_disabled = len(file_payloads) == 0
+    analyze_disabled = len(file_payloads) == 0 and len(platform_urls) == 0
     if st.button("Analyze case", type="primary", disabled=analyze_disabled):
         case_id = f"case_{uuid.uuid4().hex[:10]}"
         st.session_state["active_case_id"] = case_id
@@ -159,6 +165,7 @@ def render_upload_screen():
             case_id=case_id,
             files=file_payloads,
             description=description,
+            platform_urls=platform_urls,
         )
 
         result = run_case(case_input, on_progress=on_progress)
@@ -167,7 +174,7 @@ def render_upload_screen():
 
 
 def render_result_screen(case: Case):
-    """Render UI-005 Result Screen."""
+    """Render UI-005 Result Screen with Full Multimodal and Platform Evidence."""
     fusion = case.fusion
     if not fusion:
         st.error("No verdict was produced for this case.")
@@ -210,24 +217,70 @@ def render_result_screen(case: Case):
         st.write(f"- Authenticity score ($a$): `{fusion.auth_support:.4f}`")
         st.write(f"- Sufficiency ($\\sigma$): `{fusion.sufficiency:.4f}`")
 
-    # 3. Top Evidence Cards
-    st.subheader("Top Evidence Findings")
-    has_evidence = False
-    for art in case.artifacts:
-        for item in art.evidence:
-            has_evidence = True
+    # 3. Explicit Contradiction Map
+    if case.evidence_graph and case.evidence_graph.contradiction_list:
+        st.subheader("⚠️ Explicit Contradictions & Discrepancies")
+        for contra in case.evidence_graph.contradiction_list:
             with st.container():
-                st.write(f"🔍 **{item.description}**")
-                st.caption(
-                    f"Artifact: `{art.display_name}` | Direction: **{item.direction.upper()}** | "
-                    f"Source: {item.source} | Reference: `{item.evidence_ref.type}: {item.evidence_ref.value}`"
-                )
+                st.error(f"**Conflict Type: {contra.get('conflict_type', 'semantic').upper()}**")
+                st.write(contra.get("explanation", ""))
+                st.caption(f"Between Artifact `{contra.get('artifact_a')}` and `{contra.get('artifact_b')}` | Confidence: {contra.get('confidence_level', '').upper()}")
                 st.markdown("---")
 
-    if not has_evidence:
-        st.info("No definitive manipulation or authenticity evidence findings were recorded for this case.")
+    # 4. Cross-Modal & Cross-Artifact Relationships
+    st.subheader("Cross-Modal & Cross-Artifact Relationships")
+    if case.cross_modal_activated:
+        st.success("✅ **Cross-Modal Reasoning: ACTIVATED** (Multiple distinct media modalities evaluated)")
+    else:
+        st.info("ℹ️ **Cross-Modal Reasoning: BYPASSED** (Single modality present)")
 
-    # 4. Limitations
+    if case.relations:
+        for rel in case.relations:
+            with st.container():
+                icon = "🟢" if rel.relation in ("SUPPORTS", "MATCHES") else ("🔴" if rel.relation == "CONTRADICTS" else "⚪")
+                st.write(f"{icon} **[{rel.relation}]** `{rel.source_id}` &harr; `{rel.target_id}`")
+                if rel.explanation:
+                    st.write(rel.explanation)
+                st.caption(f"Method: {rel.method} | Confidence: {rel.confidence_level.upper()}")
+                st.markdown("---")
+    else:
+        st.write("No cross-artifact relationships were triggered.")
+
+    # 5. Cross-Platform Source Findings
+    if case.platform_artifacts:
+        st.subheader("🌐 Cross-Platform Investigation Findings")
+        for plat in case.platform_artifacts:
+            with st.expander(f"{plat.platform.upper()}: {plat.title or plat.url}", expanded=True):
+                st.write(f"**URL:** [{plat.url}]({plat.url})")
+                if plat.upload_date:
+                    st.write(f"**Upload Date:** {plat.upload_date}")
+                if plat.view_count is not None:
+                    st.write(f"**View Count:** {plat.view_count:,}")
+                if plat.comments_sample:
+                    st.write("**Sampled User Comments:**")
+                    st.caption(f"⚠️ *Notice: {plat.comment_reliability_note} Their reliability is lower than forensic evidence.*")
+                    for comm in plat.comments_sample:
+                        st.write(f"- \"{comm}\"")
+
+    # 6. Artifact Details & Semantic Extraction
+    st.subheader("Artifact Details & Semantic Claims")
+    for art in case.artifacts:
+        with st.expander(f"📁 {art.display_name} ({art.modality.upper()}) — Status: {art.status.upper()}"):
+            if art.reliability:
+                st.write(f"**Reliability Score:** `{art.reliability.score:.2f}`")
+            if art.transcript:
+                st.write(f"**Transcript (ASR):** \"{art.transcript}\" (Confidence: `{art.transcript_confidence or 0.0:.2f}`)")
+            if art.perceptual_hash:
+                st.write(f"**Perceptual Hash (dHash):** `{art.perceptual_hash}`")
+            if art.semantic_claims:
+                st.write("**Extracted Claims:**")
+                for c in art.semantic_claims:
+                    st.write(f"- {c.get('claim_text')} *({c.get('category')})*")
+            entities = art.metadata.get("entities", {})
+            if entities:
+                st.write(f"**Entities:** {entities}")
+
+    # 7. Limitations
     st.subheader("Investigation Limitations")
     if fusion.limitations:
         for lim in fusion.limitations:
@@ -235,7 +288,7 @@ def render_result_screen(case: Case):
     else:
         st.write("- No specific limitations were flagged during analysis.")
 
-    # 5. Actions
+    # 8. Actions
     st.subheader("Actions")
     act_col1, act_col2 = st.columns(2)
 
@@ -261,22 +314,37 @@ def render_result_screen(case: Case):
 
 
 def render_evaluation_tab():
-    """Render UI-007 Evaluation Tab."""
+    """Render UI-007 Evaluation Tab with real loaded evaluation results."""
     st.header("Evaluation Results & Benchmark")
-    st.info("This benchmark is small (36 cases). Treat results as indications, not guarantees.")
 
-    st.subheader("Confusion Matrix")
-    st.table({
-        "Actual \\ Predicted": ["AUTHENTIC", "MANIPULATED", "COORDINATED", "INCONCLUSIVE"],
-        "AUTHENTIC": [10, 1, 0, 1],
-        "MANIPULATED": [0, 12, 1, 1],
-        "COORDINATED": [0, 1, 7, 0],
-    })
+    import json
+    from core.config import EVAL_RESULTS_DIR
 
-    st.subheader("Performance Metrics")
-    st.write("- **Macro-F1 Score:** `0.92`")
-    st.write("- **Coverage Rate:** `0.94`")
-    st.write("- **False-Confidence Rate:** `0.00` (Zero wrong verdicts at High confidence)")
+    results_file = EVAL_RESULTS_DIR / "summary.json"
+    if results_file.exists():
+        try:
+            with open(results_file, "r", encoding="utf-8") as f:
+                eval_data = json.load(f)
+
+            st.success(f"Loaded Real Benchmark Evaluation: **{eval_data.get('cases_evaluated', 0)} cases evaluated**")
+
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Macro-F1", f"{eval_data.get('macro_f1', 0.0):.4f}")
+            col2.metric("Coverage Rate", f"{eval_data.get('coverage_rate', 0.0):.4f}")
+            col3.metric("False-Confidence Rate", f"{eval_data.get('false_confidence_rate', 0.0):.4f}")
+
+            if "confusion_matrix" in eval_data:
+                st.subheader("Confusion Matrix")
+                st.json(eval_data["confusion_matrix"])
+
+            if "ablation" in eval_data:
+                st.subheader("Baseline vs TrustLayers Ablation")
+                st.json(eval_data["ablation"])
+            return
+        except Exception:
+            pass
+
+    st.info("Evaluation benchmark not yet executed. Run 'python -m eval.run_eval' to generate real metrics.")
 
 
 def main_dashboard():
@@ -300,3 +368,4 @@ def main_dashboard():
 
     with tab2:
         render_evaluation_tab()
+

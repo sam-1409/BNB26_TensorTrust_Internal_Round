@@ -59,6 +59,63 @@ class Artifact(StrictBaseModel):
     semantic_claims: List[Dict[str, Any]] = Field(default_factory=list)
     detector_signals: List[Dict[str, Any]] = Field(default_factory=list)
     evidence: List[EvidenceItem] = Field(default_factory=list)
+    transcript: Optional[str] = None
+    transcript_confidence: Optional[float] = None
+    ocr_text: Optional[str] = None
+    platform_source: Optional[str] = None
+    platform_url: Optional[str] = None
+    perceptual_hash: Optional[str] = None
+
+
+class PlatformArtifact(StrictBaseModel):
+    """Evidence gathered from a platform source."""
+    platform: str  # "youtube" | "reddit" | "url"
+    url: str
+    title: Optional[str] = None
+    description: Optional[str] = None
+    upload_date: Optional[str] = None
+    view_count: Optional[int] = None
+    comments_sample: List[str] = Field(default_factory=list)
+    comment_reliability_note: str = "Comments are unverified user opinions."
+    sha256_of_media: Optional[str] = None
+    perceptual_hash: Optional[str] = None
+    retrieval_timestamp: str  # ISO 8601
+
+
+class CommentEvidence(StrictBaseModel):
+    """A sampled comment treated as low-reliability evidence."""
+    text: str
+    platform: str
+    direction: Literal["manipulated", "authentic", "neutral"]
+    strength: float = 0.10  # Always weak; comments are never definitive
+    reliability: float = 0.20  # Comments have low reliability
+    note: str = "User comment — unverified opinion, not forensic evidence."
+
+
+class EvidenceGraphNode(StrictBaseModel):
+    """A node in the unified evidence graph."""
+    node_id: str
+    node_type: Literal["artifact", "claim", "entity", "platform_source"]
+    label: str
+    artifact_id: Optional[str] = None
+
+
+class EvidenceGraphEdge(StrictBaseModel):
+    """A directed edge in the unified evidence graph."""
+    source_node_id: str
+    target_node_id: str
+    relation: Literal["SUPPORTS", "CONTRADICTS", "MATCHES", "LINKED", "LINKED_TO", "UNCERTAIN"]
+    method: Literal["deterministic", "llm", "platform", "perceptual"]
+    confidence_level: Literal["low", "medium", "high"]
+    explanation: str
+    evidence_refs: List[EvidenceRef] = Field(default_factory=list)
+
+
+class EvidenceGraph(StrictBaseModel):
+    """Unified graph of artifacts, claims, entities, and cross-source relations."""
+    nodes: List[EvidenceGraphNode] = Field(default_factory=list)
+    edges: List[EvidenceGraphEdge] = Field(default_factory=list)
+    contradiction_list: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class Relation(StrictBaseModel):
@@ -86,6 +143,9 @@ class Fusion(StrictBaseModel):
     inconclusive_label: Optional[str] = None
     limitations: List[str] = Field(default_factory=list)
     unavailable_checks: List[str] = Field(default_factory=list)
+    checks_applicable_by_modality: Dict[str, int] = Field(default_factory=dict)
+    cross_modal_checks_run: int = 0
+    cross_platform_checks_run: int = 0
 
 
 class Case(StrictBaseModel):
@@ -100,6 +160,10 @@ class Case(StrictBaseModel):
     relations: List[Relation] = Field(default_factory=list)
     fusion: Optional[Fusion] = None
     diagnostics: Dict[str, Any] = Field(default_factory=dict)
+    platform_artifacts: List[PlatformArtifact] = Field(default_factory=list)
+    evidence_graph: Optional[EvidenceGraph] = None
+    cross_modal_activated: bool = False
+    cross_platform_activated: bool = False
 
 
 class CaseInput(StrictBaseModel):
@@ -107,6 +171,8 @@ class CaseInput(StrictBaseModel):
     case_id: str
     files: List[Dict[str, Any]]  # List of {'filename': str, 'bytes': bytes or 'path': str}
     description: Optional[str] = None
+    platform_urls: List[str] = Field(default_factory=list)
+    investigation_query: Optional[str] = None
 
 
 class ProgressEvent(StrictBaseModel):

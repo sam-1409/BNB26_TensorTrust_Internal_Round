@@ -77,6 +77,29 @@ STRENGTH_CLASS_WEIGHTS: Final[Dict[str, float]] = {
 # Timeout Limits
 STAGE_TIMEOUT_SECONDS: Final[int] = 120
 LLM_RETRY_COUNT: Final[int] = 1
+FFMPEG_TIMEOUT_SECONDS: Final[int] = 60
+ASR_CONFIDENCE_THRESHOLD: Final[float] = 0.70
+
+# Semantic Analysis & Cross-Modal Config
+ARTIFACT_ANALYSIS_PROMPT_VERSION: Final[str] = "v1"
+CROSS_MODAL_PROMPT_VERSION: Final[str] = "v1"
+LLM_STRENGTH_MAP: Final[Dict[str, float]] = {
+    "weak": 0.25,
+    "moderate": 0.50,
+    "strong": 0.85,
+}
+
+# Coordination & Similarity Thresholds
+PERCEPTUAL_HASH_DISTANCE_THRESHOLD: Final[int] = 10
+TEXT_SIMILARITY_THRESHOLD: Final[float] = 0.80
+
+# Cross-Platform Investigation Config
+YOUTUBE_API_KEY: Final[str] = os.environ.get("YOUTUBE_API_KEY", "")
+REDDIT_CLIENT_ID: Final[str] = os.environ.get("REDDIT_CLIENT_ID", "")
+REDDIT_CLIENT_SECRET: Final[str] = os.environ.get("REDDIT_CLIENT_SECRET", "")
+MAX_PLATFORM_COMMENTS: Final[int] = 20
+COMMENT_EVIDENCE_STRENGTH: Final[float] = 0.10
+COMMENT_EVIDENCE_RELIABILITY: Final[float] = 0.20
 
 # Check Catalog (Mapping check IDs to modalities, constraints, and enablement)
 CHECK_CATALOG: Final[Dict[str, Dict[str, Any]]] = {

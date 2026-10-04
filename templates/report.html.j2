@@ -172,12 +172,86 @@
             </div>
         </div>
 
-        <div class="section-title">Case Artifacts</div>
+        <div class="section-title">Case Artifacts & Semantic Extraction</div>
         <ul>
         {% for art in case.artifacts %}
-            <li><strong>{{ art.display_name | e }}</strong> ({{ art.modality | upper }}) &mdash; Status: {{ art.status | upper }}</li>
+            <li>
+                <strong>{{ art.display_name | e }}</strong> ({{ art.modality | upper }}) &mdash; Status: {{ art.status | upper }}
+                {% if art.transcript %}
+                    <br><em>Transcript / ASR:</em> "{{ art.transcript | e }}" (Confidence: {{ "%.2f"|format(art.transcript_confidence or 0.0) }})
+                {% endif %}
+                {% if art.perceptual_hash %}
+                    <br><em>Perceptual Hash (dHash):</em> <code>{{ art.perceptual_hash | e }}</code>
+                {% endif %}
+                {% if art.semantic_claims %}
+                    <br><em>Extracted Claims:</em>
+                    <ul>
+                        {% for sc in art.semantic_claims %}
+                        <li>{{ sc.claim_text | e }} ({{ sc.category }})</li>
+                        {% endfor %}
+                    </ul>
+                {% endif %}
+            </li>
         {% endfor %}
         </ul>
+
+        {% if case.relations %}
+        <div class="section-title">Cross-Artifact & Cross-Modal Relationships</div>
+        <p><em>Cross-Modal Reasoning:</em> {% if case.cross_modal_activated %}<strong>ACTIVATED</strong> (Multiple modalities analyzed){% else %}<strong>BYPASSED</strong> (Single modality case){% endif %}</p>
+        {% for rel in case.relations %}
+            <div class="evidence-card">
+                <div>
+                    <div class="ev-finding">
+                        [{{ rel.relation }}] {{ rel.source_id }} &harr; {{ rel.target_id }}
+                        {% if rel.conflict_type %}({{ rel.conflict_type }}){% endif %}
+                    </div>
+                    <div class="ev-meta">
+                        Method: {{ rel.method }} | Confidence: {{ rel.confidence_level | upper }}
+                        <br>{{ rel.explanation | e }}
+                    </div>
+                </div>
+            </div>
+        {% endfor %}
+        {% endif %}
+
+        {% if case.evidence_graph and case.evidence_graph.contradiction_list %}
+        <div class="section-title" style="color: var(--v-manipulated);">Explicit Contradictions & Discrepancies</div>
+        {% for contra in case.evidence_graph.contradiction_list %}
+            <div class="evidence-card" style="border-left: 4px solid var(--v-manipulated);">
+                <div>
+                    <div class="ev-finding">Conflict: {{ contra.conflict_type | upper }} (Artifact {{ contra.artifact_a }} vs {{ contra.artifact_b }})</div>
+                    <div class="ev-meta">{{ contra.explanation | e }} (Confidence: {{ contra.confidence_level | upper }})</div>
+                </div>
+            </div>
+        {% endfor %}
+        {% endif %}
+
+        {% if case.platform_artifacts %}
+        <div class="section-title">Cross-Platform Source Verification</div>
+        {% for plat in case.platform_artifacts %}
+            <div class="evidence-card">
+                <div>
+                    <div class="ev-finding">Platform: {{ plat.platform | upper }} &mdash; {{ plat.title | e }}</div>
+                    <div class="ev-meta">
+                        URL: <a href="{{ plat.url | e }}" target="_blank">{{ plat.url | e }}</a>
+                        {% if plat.upload_date %}| Published: {{ plat.upload_date }}{% endif %}
+                        {% if plat.view_count %}| Views: {{ plat.view_count }}{% endif %}
+                    </div>
+                    {% if plat.comments_sample %}
+                    <div style="margin-top: 8px;">
+                        <strong>Sampled User Comments:</strong>
+                        <p style="font-size: 12px; color: var(--graphite); margin: 2px 0;"><em>Notice: {{ plat.comment_reliability_note }} Their reliability is lower than forensic evidence.</em></p>
+                        <ul>
+                            {% for comm in plat.comments_sample %}
+                            <li style="font-size: 13px;">"{{ comm | e }}"</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        {% endfor %}
+        {% endif %}
 
         <div class="section-title">Evidence Findings</div>
         {% for art in case.artifacts %}

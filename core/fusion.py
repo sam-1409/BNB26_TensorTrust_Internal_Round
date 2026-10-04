@@ -146,8 +146,12 @@ def compute_fusion(
     else:
         sufficiency = 0.0
 
-    # 5. Check set-level coordination (LINKED relations)
-    linked_relations = [r for r in relations if r.relation == "LINKED"]
+    # 5. Check set-level coordination (LINKED/MATCHES relations)
+    linked_relations = [
+        r for r in relations
+        if r.relation in ("LINKED", "MATCHES")
+        and r.conflict_type in ("set_coordination", "near_duplicate", "text_repost")
+    ]
     # Check if >= 2 artifacts have artifact-level m > tau_m and are linked
     arts_with_manip = set()
     for item in manip_items:
