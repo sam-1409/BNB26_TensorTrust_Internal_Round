@@ -166,6 +166,7 @@ def render_upload_screen():
             files=file_payloads,
             description=description,
             platform_urls=platform_urls,
+            investigation_query=description if description else None,
         )
 
         result = run_case(case_input, on_progress=on_progress)
@@ -198,7 +199,7 @@ def render_result_screen(case: Case):
 
     col1, col2, col3 = st.columns(3)
     col1.metric("Confidence Level", fusion.confidence_level.upper())
-    col2.metric("Sufficiency", f"{fusion.checks_completed} / {fusion.checks_applicable} checks")
+    col2.metric("Sufficiency", f"{min(fusion.checks_completed, fusion.checks_applicable)} / {fusion.checks_applicable} checks")
     col3.metric("Reason Codes", ", ".join(fusion.reason_codes) if fusion.reason_codes else "None")
     st.markdown('</div>', unsafe_allow_html=True)
 

@@ -8,9 +8,21 @@ import os
 from pathlib import Path
 from typing import Final, Dict, Set, List, Any
 
+try:
+    from dotenv import load_dotenv, find_dotenv
+    _env_file = find_dotenv(usecwd=True)
+    if _env_file:
+        load_dotenv(_env_file)
+    for _p in [Path(__file__).parent.parent / ".env", Path(__file__).parent.parent.parent / ".env"]:
+        if _p.exists():
+            load_dotenv(_p)
+except ImportError:
+    pass
+
 # Environment Settings
 GEMINI_API_KEY: Final[str] = os.environ.get("GEMINI_API_KEY", "")
-GEMINI_MODEL: Final[str] = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash")
+GEMINI_MODEL: Final[str] = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_FALLBACK_MODELS: Final[List[str]] = ["gemini-2.5-flash", "gemini-flash-latest"]
 GEMINI_TIER: Final[str] = os.environ.get("GEMINI_TIER", "paid")  # paid | free
 APP_MODE: Final[str] = os.environ.get("APP_MODE", "interactive")  # interactive | eval
 

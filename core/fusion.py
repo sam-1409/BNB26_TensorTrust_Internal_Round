@@ -138,13 +138,15 @@ def compute_fusion(
 
     # 4. Compute sufficiency sigma = (reliable checks completed) / (checks applicable)
     total_applicable_checks = compute_applicable_checks(artifacts, catalog=catalog)
-    completed_checks = len(evidence_items)
+    raw_completed = len(evidence_items)
     reliable_completed_checks = sum(1 for item in evidence_items if item.reliability >= tau_r)
 
     if total_applicable_checks > 0:
         sufficiency = max(0.0, min(1.0, reliable_completed_checks / float(total_applicable_checks)))
+        completed_checks = min(raw_completed, total_applicable_checks)
     else:
         sufficiency = 0.0
+        completed_checks = raw_completed
 
     # 5. Check set-level coordination (LINKED/MATCHES relations)
     linked_relations = [
